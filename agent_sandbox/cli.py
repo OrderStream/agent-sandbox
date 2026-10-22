@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from agent_sandbox import __version__
@@ -132,7 +134,15 @@ def cmd_exec(args: argparse.Namespace) -> int:
     policy = load_policy(args.policy) if args.policy else Policy()
     sandbox = ExecutionSandbox(root_dir=args.workdir, policy=policy)
 
-    command_str = " ".join(args.command) if isinstance(args.command, list) else str(args.command)
+    if isinstance(args.command, list):
+        if os.name == "nt":
+            command_str = subprocess.list2cmdline(args.command)
+        else:
+            import shlex
+            command_str = shlex.join(args.command)
+    else:
+        command_str = str(args.command)
+
     if not command_str.strip():
         print("[!] Error: No command provided to execute.", file=sys.stderr)
         return 1

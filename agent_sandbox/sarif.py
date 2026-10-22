@@ -60,8 +60,9 @@ def generate_sarif_report(receipt: MerkleReceipt | Dict[str, Any], output_path: 
         exit_code = ev.get("exit_code")
         action = ev.get("action_type")
         target = ev.get("target", "")
+        is_violation = ev.get("is_violation", False)
 
-        if action == "policy_block" or exit_code == 126:
+        if is_violation or action == "policy_block" or exit_code == 126:
             # Map to rule
             rule_id = "AS001"
             if ".github" in target or ".git" in target:
@@ -98,6 +99,7 @@ def generate_sarif_report(receipt: MerkleReceipt | Dict[str, Any], output_path: 
             }
             sarif_results.append(result_entry)
 
+    from agent_sandbox import __version__
     sarif_doc = {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
         "version": "2.1.0",
@@ -107,7 +109,7 @@ def generate_sarif_report(receipt: MerkleReceipt | Dict[str, Any], output_path: 
                     "driver": {
                         "name": "agent-sandbox",
                         "informationUri": "https://github.com/OrderStream/agent-sandbox",
-                        "semanticVersion": "0.1.0",
+                        "semanticVersion": __version__,
                         "rules": list(RULES_CATALOG.values())
                     }
                 },

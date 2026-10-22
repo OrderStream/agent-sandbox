@@ -51,8 +51,9 @@ def generate_step_summary(
         exit_code = ev.get("exit_code")
         leaf = ev.get("leaf_hash", "")[:12] + "..."
         
-        if atype == "policy_block" or exit_code == 126:
-            item_status = "🚫 Blocked"
+        is_violation = ev.get("is_violation", False)
+        if atype == "policy_block" or exit_code == 126 or is_violation:
+            item_status = "🚫 Blocked" if (atype == "policy_block" or exit_code == 126) else "⚠️ Violation"
         elif exit_code == 0:
             item_status = "🟢 Allowed"
         else:

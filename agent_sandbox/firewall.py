@@ -107,9 +107,9 @@ class CommandFirewall:
 
     def _extract_atomic_commands(self, cmd: str) -> List[str]:
         """
-        Split compound commands (piped, chained, subshells) into discrete executable tokens,
-        respecting quotation marks so that arguments like `python -c "import a; import b"`
-        are not erroneously split on interior delimiters.
+        Split compound commands (piped, chained, subshells, process substitutions)
+        into discrete executable tokens, respecting backslash escapes, nested parentheses,
+        and quotation marks so that malicious commands cannot be hidden in subexpressions.
         """
         atoms: List[str] = []
         current: List[str] = []
@@ -121,7 +121,14 @@ class CommandFirewall:
         while i < n:
             ch = cmd[i]
 
-            # Toggle quote states if not escaped
+            # Backslash escape handling: outside single quotes, \ escapes the next character
+            if ch == "\\" and not in_single and i + 1 < n:
+                current.append(ch)
+                current.append(cmd[i + 1])
+                i += 2
+                continue
+
+            # Toggle quote states
             if ch == "'" and not in_double:
                 in_single = not in_single
                 current.append(ch)
@@ -143,8 +150,8 @@ class CommandFirewall:
                     current = []
                     i += 2
                     continue
-                # Check 1-char delimiters: ;, |, &, \n
-                elif ch in (";", "|", "&", "\n"):
+                # Check 1-char delimiters: ;, |, &, \n, \r
+                elif ch in (";", "|", "&", "\n", "\r"):
                     atom_str = "".join(current).strip()
                     if atom_str:
                         atoms.append(atom_str)
@@ -159,34 +166,109 @@ class CommandFirewall:
         if last_atom:
             atoms.append(last_atom)
 
-        # Now for each atom, also extract any subshells $(...) or `...` or -c nested
-        subshell_atoms: List[str] = []
+        # Now extract subshells, process substitutions, backticks, and eval/bash -c executions
+        expanded_atoms: List[str] = []
         for atom in atoms:
-            subshells = re.findall(r"\$\((.+?)\)|`(.+?)`", atom)
-            for s1, s2 in subshells:
-                sub_cmd = s1 or s2
-                if sub_cmd.strip():
-                    subshell_atoms.append(sub_cmd.strip())
+            sub_exprs = self._extract_subshell_expressions(atom)
+            for sub in sub_exprs:
+                expanded_atoms.extend(self._extract_atomic_commands(sub))
 
-            # Check nested sh/bash -c "..."
+            # Check nested sh/bash/zsh -c "..."
             nested_matches = re.findall(r"""(?:sh|bash|zsh|dash)\s+-c\s+["']([^"']+)["']""", atom)
             for nested in nested_matches:
                 if nested.strip():
-                    subshell_atoms.extend(self._extract_atomic_commands(nested))
+                    expanded_atoms.extend(self._extract_atomic_commands(nested))
 
-            subshell_atoms.append(atom)
+            # Check eval "..." or eval '...'
+            eval_matches = re.findall(r"""\beval\s+["']([^"']+)["']""", atom)
+            for ev_cmd in eval_matches:
+                if ev_cmd.strip():
+                    expanded_atoms.extend(self._extract_atomic_commands(ev_cmd))
 
-        return subshell_atoms
+            expanded_atoms.append(atom)
+
+        return expanded_atoms
+
+    def _extract_subshell_expressions(self, text: str) -> List[str]:
+        """
+        Extract nested subshell expressions: $(...), <(...), >(...), and `...`
+        handling arbitrary nested parentheses and quotes safely.
+        """
+        extracted: List[str] = []
+        i = 0
+        n = len(text)
+
+        while i < n:
+            # Check for $(...), <(...), >(...)
+            if i + 1 < n and (text[i:i+2] in ("$(", "<(", ">(")):
+                start = i + 2
+                depth = 1
+                j = start
+                in_s = False
+                in_d = False
+                while j < n and depth > 0:
+                    c = text[j]
+                    if c == "\\" and not in_s and j + 1 < n:
+                        j += 2
+                        continue
+                    if c == "'" and not in_d:
+                        in_s = not in_s
+                    elif c == '"' and not in_s:
+                        in_d = not in_d
+                    elif not in_s and not in_d:
+                        if c == "(":
+                            depth += 1
+                        elif c == ")":
+                            depth -= 1
+                            if depth == 0:
+                                inner = text[start:j].strip()
+                                if inner:
+                                    extracted.append(inner)
+                                i = j + 1
+                                break
+                    j += 1
+                else:
+                    i = j
+                continue
+
+            # Check for backticks `...`
+            elif text[i] == "`":
+                j = i + 1
+                while j < n:
+                    if text[j] == "\\" and j + 1 < n:
+                        j += 2
+                        continue
+                    if text[j] == "`":
+                        inner = text[i+1:j].strip()
+                        if inner:
+                            extracted.append(inner)
+                        i = j + 1
+                        break
+                    j += 1
+                else:
+                    i = n
+                continue
+
+            i += 1
+
+        return extracted
 
     def _normalize_command_atom(self, atom: str) -> str:
         """
-        De-obfuscate executable name: remove escaping quotes, strip path prefixes.
+        De-obfuscate executable name: remove escaping quotes, strip path prefixes,
+        strip leading environment variable assignments (FOO=bar cmd), remove Windows cmd caret escapes.
         e.g., 'c""url -s http://...' -> 'curl -s http://...'
               '/usr/bin/git status' -> 'git status'
+              'FOO=bar curl http://...' -> 'curl http://...'
         """
         trimmed = atom.strip()
-        # Remove redirects before parsing command head
-        cmd_no_redirect = re.split(r"(?:>|<|>>)", trimmed)[0].strip()
+        # Strip subshell grouping parentheses / braces
+        trimmed = re.sub(r"^[({!\s]+", "", trimmed)
+        trimmed = re.sub(r"[)};\s]+$", "", trimmed)
+
+        # Remove file redirects before parsing command head, but preserve process substitutions
+        # only match redirects not followed by paren
+        cmd_no_redirect = re.split(r"(?:>>|>(?!\()|<(?!\())", trimmed)[0].strip()
         if not cmd_no_redirect:
             return ""
 
@@ -198,8 +280,18 @@ class CommandFirewall:
         if not tokens:
             return ""
 
+        # Skip leading environment variable assignments (e.g., FOO=bar cmd)
+        idx = 0
+        while idx < len(tokens) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=.*", tokens[idx]):
+            idx += 1
+        if idx >= len(tokens):
+            return ""
+        tokens = tokens[idx:]
+
         # Normalize executable token across Windows and Unix paths
-        raw_exe = tokens[0].strip("\"'")
+        raw_exe = tokens[0].strip("\"'()`;{}")
+        # Strip Windows cmd caret escape characters (e.g. c^u^r^l -> curl)
+        raw_exe = raw_exe.replace("^", "")
         # Convert all backslashes to forward slashes first to preserve path separation
         path_normalized = raw_exe.replace("\\", "/")
         base_exe = os.path.basename(path_normalized)

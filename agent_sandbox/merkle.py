@@ -30,13 +30,14 @@ class MerkleNode:
     pre_state_hash: str
     post_state_hash: str
     prev_node_hash: str
+    is_violation: bool = False
     leaf_hash: str = ""
 
     def compute_leaf_hash(self) -> str:
         payload = (
             f"{self.index}:{self.timestamp}:{self.action_type}:{self.target}:"
             f"{self.exit_code}:{self.stdout_hash}:{self.pre_state_hash}:"
-            f"{self.post_state_hash}:{self.prev_node_hash}"
+            f"{self.post_state_hash}:{self.prev_node_hash}:{1 if self.is_violation else 0}"
         )
         return sha256_hex(payload)
 
@@ -116,6 +117,7 @@ class MerkleDAG:
             pre_state_hash=pre_state_hash or self.GENESIS_HASH,
             post_state_hash=post_state_hash or self.GENESIS_HASH,
             prev_node_hash=self.last_hash,
+            is_violation=is_violation,
         )
         node.leaf_hash = node.compute_leaf_hash()
         self.nodes.append(node)
@@ -205,6 +207,7 @@ def verify_receipt(receipt_data: str | Path | Dict[str, Any]) -> Tuple[bool, str
             pre_state_hash=ev["pre_state_hash"],
             post_state_hash=ev["post_state_hash"],
             prev_node_hash=ev["prev_node_hash"],
+            is_violation=ev.get("is_violation", False),
         )
         calculated_leaf = node.compute_leaf_hash()
         

@@ -133,8 +133,8 @@ class ExecutionSandbox:
         clean_stderr = self.scrubber.scrub(stderr_raw)
 
         # 6. Post-execution Filesystem Diff & Verification
-        diff = self.path_jail.diff_workspace(pre_snapshot)
         post_snapshot = self.path_jail.snapshot_workspace()
+        diff = self.path_jail.diff_workspace(pre_snapshot, post_snapshot=post_snapshot)
         post_hash = sha256_hex(json.dumps(post_snapshot, sort_keys=True))
 
         diff_violations = self.path_jail.verify_diff(diff)

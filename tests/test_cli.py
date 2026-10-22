@@ -58,6 +58,20 @@ class TestCLI(unittest.TestCase):
             bad_v_code = main(["verify", str(receipt_path)])
             self.assertEqual(bad_v_code, 2)
 
+    def test_exec_single_command_string(self):
+        # Regression test for single-string commands with spaces passed via CI/CD
+        code = main([
+            "exec",
+            "--",
+            f"{sys.executable} -c print('single_string_ok')"
+        ])
+        self.assertEqual(code, 0)
+
+    def test_mcp_cli_help(self):
+        with self.assertRaises(SystemExit) as cm:
+            main(["mcp", "--help"])
+        self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

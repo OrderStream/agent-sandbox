@@ -135,7 +135,9 @@ def cmd_exec(args: argparse.Namespace) -> int:
     sandbox = ExecutionSandbox(root_dir=args.workdir, policy=policy)
 
     if isinstance(args.command, list):
-        if os.name == "nt":
+        if len(args.command) == 1:
+            command_str = args.command[0]
+        elif os.name == "nt":
             command_str = subprocess.list2cmdline(args.command)
         else:
             import shlex
@@ -181,6 +183,13 @@ def cmd_exec(args: argparse.Namespace) -> int:
     return result.exit_code
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from agent_sandbox.mcp_proxy import MCPProxyFilter, run_mcp_stdio_proxy
+    policy = load_policy(args.policy) if args.policy else Policy()
+    mcp_filter = MCPProxyFilter(sandbox_root=args.workdir, policy=policy)
+    return run_mcp_stdio_proxy(mcp_filter, upstream_cmd=args.server)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="agent-sandbox",
@@ -214,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
     ins_p.add_argument("--policy", "-p", help="Path to policy YAML or JSON file")
     ins_p.add_argument("command", help="Command string to analyze")
 
+    # mcp subcommand
+    mcp_p = subparsers.add_parser("mcp", help="Run Model Context Protocol (MCP) stdio firewall proxy")
+    mcp_p.add_argument("--policy", "-p", help="Path to policy YAML or JSON file")
+    mcp_p.add_argument("--workdir", "-w", default=".", help="Root directory boundary (default: current dir)")
+    mcp_p.add_argument("--server", "-s", help="Upstream MCP server command to wrap (e.g. 'npx -y @modelcontextprotocol/server-filesystem .')")
+
     args = parser.parse_args(argv)
 
     if args.subcommand == "exec":
@@ -227,6 +242,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_init(args)
     elif args.subcommand == "inspect":
         return cmd_inspect(args)
+    elif args.subcommand == "mcp":
+        return cmd_mcp(args)
     else:
         parser.print_help()
         return 0

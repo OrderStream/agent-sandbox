@@ -141,12 +141,17 @@ class PathJail:
         count = 0
 
         for current_root, dirs, files in os.walk(self.root_dir):
+            if count >= max_files:
+                dirs[:] = []
+                break
+
             # Prune .git and virtualenvs
             dirs[:] = [d for d in dirs if d not in {".git", ".venv", "venv", "__pycache__", "node_modules"}]
 
             for file_name in files:
                 count += 1
                 if count > max_files:
+                    dirs[:] = []
                     break
 
                 full_path = Path(current_root) / file_name
@@ -154,16 +159,18 @@ class PathJail:
                     rel_path = full_path.relative_to(self.root_dir).as_posix()
                     file_hash = self._hash_file(full_path)
                     snapshot[rel_path] = file_hash
-                except (OSError, PermissionError):
+                except (OSError, PermissionError, RuntimeError):
                     continue
 
         return snapshot
 
-    def diff_workspace(self, pre_snapshot: Dict[str, str]) -> FileDiff:
+    def diff_workspace(self, pre_snapshot: Dict[str, str], post_snapshot: Optional[Dict[str, str]] = None) -> FileDiff:
         """
         Compare current filesystem state against a prior snapshot.
+        If post_snapshot is provided, reuses it to eliminate redundant filesystem hashing.
         """
-        post_snapshot = self.snapshot_workspace()
+        if post_snapshot is None:
+            post_snapshot = self.snapshot_workspace()
         
         added: List[str] = []
         modified: List[str] = []

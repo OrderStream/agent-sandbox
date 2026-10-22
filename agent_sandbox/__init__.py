@@ -13,7 +13,7 @@ from agent_sandbox.path_jail import PathJail, PathViolation
 from agent_sandbox.env_scrubber import EnvironmentScrubber
 from agent_sandbox.merkle import MerkleDAG, MerkleNode, MerkleReceipt, verify_receipt
 from agent_sandbox.runner import ExecutionSandbox, ExecutionResult
-from agent_sandbox.mcp_proxy import MCPProxyFilter
+from agent_sandbox.mcp_proxy import MCPProxyFilter, run_mcp_stdio_proxy
 from agent_sandbox.sarif import generate_sarif_report
 from agent_sandbox.summary import generate_step_summary
 
@@ -34,6 +34,7 @@ __all__ = [
     "ExecutionSandbox",
     "ExecutionResult",
     "MCPProxyFilter",
+    "run_mcp_stdio_proxy",
     "generate_sarif_report",
     "generate_step_summary",
 ]

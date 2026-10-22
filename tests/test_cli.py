@@ -63,7 +63,7 @@ class TestCLI(unittest.TestCase):
         code = main([
             "exec",
             "--",
-            f"{sys.executable} -c print('single_string_ok')"
+            f'{sys.executable} -c "import sys; sys.exit(0)"'
         ])
         self.assertEqual(code, 0)
 

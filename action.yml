@@ -62,34 +62,42 @@ runs:
     - name: Run Sandboxed Command
       id: run-sandbox
       shell: bash
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_POLICY: ${{ inputs.policy }}
+        INPUT_WORKDIR: ${{ inputs.workdir }}
+        INPUT_RECEIPT: ${{ inputs.receipt }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
       run: |
         POLICY_FLAG=""
-        if [ -n "${{ inputs.policy }}" ]; then
-          POLICY_FLAG="--policy ${{ inputs.policy }}"
+        if [ -n "$INPUT_POLICY" ]; then
+          POLICY_FLAG="--policy $INPUT_POLICY"
         fi
 
         SUMMARY_FLAG=""
-        if [ "${{ inputs.summary }}" = "true" ]; then
+        if [ "$INPUT_SUMMARY" = "true" ]; then
           SUMMARY_FLAG="--summary"
         fi
 
         set +e
         agent-sandbox exec \
           $POLICY_FLAG \
-          --workdir "${{ inputs.workdir }}" \
-          --receipt "${{ inputs.receipt }}" \
-          --sarif "${{ inputs.sarif }}" \
+          --workdir "$INPUT_WORKDIR" \
+          --receipt "$INPUT_RECEIPT" \
+          --sarif "$INPUT_SARIF" \
           $SUMMARY_FLAG \
-          --timeout "${{ inputs.timeout }}" \
-          -- "${{ inputs.command }}"
+          --timeout "$INPUT_TIMEOUT" \
+          -- "$INPUT_COMMAND"
         EXIT_CODE=$?
         set -e
 
         echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-        if [ -f "${{ inputs.receipt }}" ]; then
-          ROOT=$(python -c "import json; print(json.load(open('${{ inputs.receipt }}'))['merkle_root'])")
-          VIOLATIONS=$(python -c "import json; print(json.load(open('${{ inputs.receipt }}'))['violations_count'])")
+        if [ -f "$INPUT_RECEIPT" ]; then
+          ROOT=$(python -c "import json; print(json.load(open('$INPUT_RECEIPT'))['merkle_root'])")
+          VIOLATIONS=$(python -c "import json; print(json.load(open('$INPUT_RECEIPT'))['violations_count'])")
           echo "merkle-root=$ROOT" >> "$GITHUB_OUTPUT"
           echo "violations-count=$VIOLATIONS" >> "$GITHUB_OUTPUT"
         fi

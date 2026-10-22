@@ -1,0 +1,97 @@
+name: "agent-sandbox"
+description: "Deterministic Zero-Trust Security Sandbox & Cryptographic Audit DAG for Autonomous AI Agents in CI/CD"
+author: "OrderStream"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  command:
+    description: "Command or agent runner script to execute within the sandbox"
+    required: true
+  policy:
+    description: "Path to security policy YAML or JSON file"
+    required: false
+    default: ""
+  workdir:
+    description: "Working directory boundary for execution"
+    required: false
+    default: "."
+  receipt:
+    description: "Path to write cryptographic execution receipt JSON"
+    required: false
+    default: "agent-sandbox-receipt.json"
+  sarif:
+    description: "Path to write SARIF 2.1.0 report for GitHub Code Scanning"
+    required: false
+    default: "agent-sandbox.sarif"
+  summary:
+    description: "Generate GitHub Actions step summary markdown"
+    required: false
+    default: "true"
+  timeout:
+    description: "Execution timeout in seconds"
+    required: false
+    default: "120"
+
+outputs:
+  merkle-root:
+    description: "Cryptographic SHA-256 Merkle root of the execution audit DAG"
+    value: ${{ steps.run-sandbox.outputs.merkle-root }}
+  exit-code:
+    description: "Process exit code from sandboxed execution"
+    value: ${{ steps.run-sandbox.outputs.exit-code }}
+  violations-count:
+    description: "Total number of policy violations detected"
+    value: ${{ steps.run-sandbox.outputs.violations-count }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install agent-sandbox
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -e "${{ github.action_path }}"
+
+    - name: Run Sandboxed Command
+      id: run-sandbox
+      shell: bash
+      run: |
+        POLICY_FLAG=""
+        if [ -n "${{ inputs.policy }}" ]; then
+          POLICY_FLAG="--policy ${{ inputs.policy }}"
+        fi
+
+        SUMMARY_FLAG=""
+        if [ "${{ inputs.summary }}" = "true" ]; then
+          SUMMARY_FLAG="--summary"
+        fi
+
+        set +e
+        agent-sandbox exec \
+          $POLICY_FLAG \
+          --workdir "${{ inputs.workdir }}" \
+          --receipt "${{ inputs.receipt }}" \
+          --sarif "${{ inputs.sarif }}" \
+          $SUMMARY_FLAG \
+          --timeout "${{ inputs.timeout }}" \
+          -- ${{ inputs.command }}
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+        if [ -f "${{ inputs.receipt }}" ]; then
+          ROOT=$(python -c "import json; print(json.load(open('${{ inputs.receipt }}'))['merkle_root'])")
+          VIOLATIONS=$(python -c "import json; print(json.load(open('${{ inputs.receipt }}'))['violations_count'])")
+          echo "merkle-root=$ROOT" >> "$GITHUB_OUTPUT"
+          echo "violations-count=$VIOLATIONS" >> "$GITHUB_OUTPUT"
+        fi
+
+        exit $EXIT_CODE

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-sandbox"
+version = "0.1.0"
+description = "Deterministic Zero-Trust Security Sandbox & Cryptographic Audit DAG for Autonomous AI Agents in CI/CD"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "OrderStream", email = "orderstream@users.noreply.github.com" }
+]
+keywords = [
+    "ai-agents",
+    "security",
+    "sandbox",
+    "github-actions",
+    "mcp",
+    "zero-trust",
+    "merkle-dag",
+    "prompt-injection",
+    "audit-trail",
+    "sarif"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+agent-sandbox = "agent_sandbox.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OrderStream/agent-sandbox"
+Repository = "https://github.com/OrderStream/agent-sandbox"
+"Issue Tracker" = "https://github.com/OrderStream/agent-sandbox/issues"

@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Environments
+.venv/
+venv/
+ENV/
+
+# Output artifacts
+*.sarif
+*-receipt.json
+receipt.json
+dogfood-receipt.json
+dogfood.sarif
+test-policy.yaml
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

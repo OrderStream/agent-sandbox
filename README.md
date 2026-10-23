@@ -317,6 +317,47 @@ Benchmarked on GitHub Actions Standard Runners (Ubuntu 22.04 LTS):
 
 ---
 
+## 💼 Commercial Productization & Enterprise Tiers
+
+`agent-sandbox` is completely free and open-source for individual developers, local testing, and standard CI verification. For engineering teams and enterprises running autonomous agents across multi-repository fleets with strict compliance requirements (SOC2, ISO27001, HIPAA), we offer enterprise licenses, cloud telemetry, and direct GitHub Marketplace subscriptions.
+
+### Pricing Plans
+
+| Tier | Price | Best For | Key Capabilities |
+|------|-------|----------|------------------|
+| **Community (OSS)** | **Free ($0)** | Individual devs & open-source | Local CLI sandbox, path jail, secret scrubber, AST firewall, local Merkle receipts, SARIF 2.1.0 export |
+| **Developer Pro** | **$49 / month** | Small teams (up to 5 agents) | Cloud Merkle receipt retention (90 days), Slack & Discord real-time alerts, remote webhook sync |
+| **Team Cloud** | **$199 / month** | Fast-growing startups (up to 20 agents) | Centralized web dashboard, multi-repo aggregation, 365-day Merkle retention, tamper-evident audit exports |
+| **Enterprise Dedicated** | **$999 / month** | Large enterprises & fintechs | Unlimited agents, SSO / SAML Okta integration, custom SIEM streaming (Splunk/Datadog), SOC2/ISO27001 compliance audit bundle, dual-authorization human gating |
+
+### Activating Your Enterprise License
+
+To activate an enterprise license key:
+```bash
+# Verify license status
+agent-sandbox license ASL1.<payload>.<signature>
+
+# Or set via environment variable
+export AGENT_SANDBOX_LICENSE_KEY="ASL1.eyJjaWQiOi..."
+```
+
+### Remote Cloud Synchronization & Slack Alerts
+
+Stream real-time agent execution receipts into your centralized security dashboard and dispatch instant alerts upon policy violations:
+
+```bash
+agent-sandbox exec \
+  --cloud-endpoint "https://cloud.agentsandbox.dev/api/v1/telemetry" \
+  --cloud-api-key "${{ secrets.AGENT_SANDBOX_CLOUD_KEY }}" \
+  --webhook "https://hooks.slack.com/services/..." \
+  -- python autonomous_agent.py
+```
+
+### GitHub Marketplace 1-Click Installation
+When integrated via GitHub Actions in private repositories, commercial organizations can subscribe directly through [GitHub Marketplace](https://github.com/marketplace). Charges appear directly on your unified GitHub corporate invoice.
+
+---
+
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome!

@@ -176,11 +176,49 @@ def cmd_exec(args: argparse.Namespace) -> int:
     if args.summary:
         generate_step_summary(receipt, write_to_env=True)
 
+    # Enterprise Tier: Cloud Synchronization
+    cloud_ep = args.cloud_endpoint or policy.cloud_sync_endpoint or os.environ.get("AGENT_SANDBOX_CLOUD_ENDPOINT")
+    if cloud_ep:
+        from agent_sandbox.cloud_sync import push_receipt_to_cloud
+        cloud_key = args.cloud_api_key or policy.cloud_api_key or os.environ.get("AGENT_SANDBOX_CLOUD_API_KEY")
+        ok, msg = push_receipt_to_cloud(receipt, endpoint=cloud_ep, api_key=cloud_key)
+        if ok:
+            print(f"[+] Cloud Telemetry: {msg}", file=sys.stderr)
+        else:
+            print(f"[!] Cloud Telemetry Warning: {msg}", file=sys.stderr)
+
+    # Enterprise Tier: Security Webhook Alerts (Slack/Discord/SIEM)
+    webhook_url = args.webhook or policy.security_webhook or os.environ.get("AGENT_SANDBOX_SECURITY_WEBHOOK")
+    if webhook_url:
+        from agent_sandbox.cloud_sync import notify_security_webhook
+        ok, msg = notify_security_webhook(receipt, webhook_url=webhook_url)
+        if ok:
+            print(f"[+] Security Alert: {msg}", file=sys.stderr)
+        else:
+            print(f"[!] Security Alert Warning: {msg}", file=sys.stderr)
+
     if result.blocked:
         print(f"[!] Command execution blocked by agent-sandbox policy: {result.violations}", file=sys.stderr)
         return result.exit_code or 126
 
     return result.exit_code
+
+
+def cmd_license_verify(args: argparse.Namespace) -> int:
+    from agent_sandbox.license import verify_license_key
+    key = args.license_key or os.environ.get("AGENT_SANDBOX_LICENSE_KEY")
+    if not key:
+        print("[!] Error: No license key provided. Specify via argument or AGENT_SANDBOX_LICENSE_KEY.", file=sys.stderr)
+        return 1
+    
+    valid, info, msg = verify_license_key(key)
+    if valid and info:
+        print(f"[+] Enterprise License VALID: Tier '{info.tier}', Seats: {info.seats}, Org: {info.org_domain}")
+        print(f"    Features: {', '.join(info.features)}")
+        return 0
+    else:
+        print(f"[-] Enterprise License INVALID: {msg}", file=sys.stderr)
+        return 2
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
@@ -207,11 +245,20 @@ def main(argv: list[str] | None = None) -> int:
     exec_p.add_argument("--sarif", "-s", help="Path to write SARIF 2.1.0 security report")
     exec_p.add_argument("--summary", action="store_true", help="Generate GitHub Actions step summary")
     exec_p.add_argument("--timeout", "-t", type=int, help="Override command timeout in seconds")
+    # Enterprise Cloud & License flags
+    exec_p.add_argument("--license-key", help="Commercial enterprise license key")
+    exec_p.add_argument("--cloud-endpoint", help="Agent-Sandbox Cloud SaaS ingestion endpoint URL")
+    exec_p.add_argument("--cloud-api-key", help="API key for Agent-Sandbox Cloud")
+    exec_p.add_argument("--webhook", help="Security webhook URL (Slack / Discord / SIEM) for real-time violation alerts")
     exec_p.add_argument("command", nargs=argparse.REMAINDER, help="Command and arguments to execute")
 
     # verify subcommand
     ver_p = subparsers.add_parser("verify", help="Verify cryptographic receipt Merkle root")
     ver_p.add_argument("receipt", help="Path to receipt.json to verify")
+
+    # license subcommand
+    lic_p = subparsers.add_parser("license", help="Verify enterprise license key")
+    lic_p.add_argument("license_key", nargs="?", help="License key to validate (or reads AGENT_SANDBOX_LICENSE_KEY)")
 
     # init subcommand
     init_p = subparsers.add_parser("init", help="Initialize a starter security policy")
@@ -238,6 +285,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_exec(args)
     elif args.subcommand == "verify":
         return cmd_verify(args)
+    elif args.subcommand == "license":
+        return cmd_license_verify(args)
     elif args.subcommand == "init":
         return cmd_init(args)
     elif args.subcommand == "inspect":

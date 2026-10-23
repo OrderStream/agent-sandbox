@@ -74,6 +74,13 @@ class Policy:
     max_output_bytes: int = 2 * 1024 * 1024  # 2MB
     isolate_working_dir: bool = False
 
+    # Enterprise Tier Guardrails
+    enterprise_license: Optional[str] = None
+    require_human_approval: bool = False
+    cloud_sync_endpoint: Optional[str] = None
+    cloud_api_key: Optional[str] = None
+    security_webhook: Optional[str] = None
+
     def is_enforcing(self) -> bool:
         return self.mode.lower() == "enforce"
 
@@ -96,6 +103,11 @@ class Policy:
             "max_execution_time_seconds": self.max_execution_time_seconds,
             "max_output_bytes": self.max_output_bytes,
             "isolate_working_dir": self.isolate_working_dir,
+            "enterprise_license": self.enterprise_license,
+            "require_human_approval": self.require_human_approval,
+            "cloud_sync_endpoint": self.cloud_sync_endpoint,
+            "cloud_api_key": self.cloud_api_key,
+            "security_webhook": self.security_webhook,
         }
 
     @classmethod

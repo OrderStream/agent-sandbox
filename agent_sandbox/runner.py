@@ -83,8 +83,9 @@ class ExecutionSandbox:
                     blocked=True,
                 )
 
-        # 2. Workspace Pre-execution Snapshot
-        pre_snapshot = self.path_jail.snapshot_workspace()
+        # 2. Workspace Pre-execution Snapshot (Targeted allowlist diffing)
+        target_patterns = self.policy.allowed_paths_write if self.policy.allowed_paths_write else None
+        pre_snapshot = self.path_jail.snapshot_workspace(target_patterns=target_patterns)
         pre_hash = sha256_hex(json.dumps(pre_snapshot, sort_keys=True))
 
         # 3. Environment Sanitization
@@ -133,8 +134,12 @@ class ExecutionSandbox:
         clean_stderr = self.scrubber.scrub(stderr_raw)
 
         # 6. Post-execution Filesystem Diff & Verification
-        post_snapshot = self.path_jail.snapshot_workspace()
-        diff = self.path_jail.diff_workspace(pre_snapshot, post_snapshot=post_snapshot)
+        post_snapshot = self.path_jail.snapshot_workspace(target_patterns=target_patterns)
+        diff = self.path_jail.diff_workspace(
+            pre_snapshot,
+            post_snapshot=post_snapshot,
+            target_patterns=target_patterns,
+        )
         post_hash = sha256_hex(json.dumps(post_snapshot, sort_keys=True))
 
         diff_violations = self.path_jail.verify_diff(diff)
@@ -179,7 +184,7 @@ class ExecutionSandbox:
         target = Path(file_path)
         full_path = target if target.is_absolute() else (self.root_dir / target).resolve()
         
-        pre_snapshot = self.path_jail.snapshot_workspace()
+        pre_snapshot = self.path_jail.snapshot_workspace(explicit_paths=[full_path])
         pre_hash = sha256_hex(json.dumps(pre_snapshot, sort_keys=True))
 
         full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -188,7 +193,7 @@ class ExecutionSandbox:
         else:
             full_path.write_bytes(content)
 
-        post_snapshot = self.path_jail.snapshot_workspace()
+        post_snapshot = self.path_jail.snapshot_workspace(explicit_paths=[full_path])
         post_hash = sha256_hex(json.dumps(post_snapshot, sort_keys=True))
 
         rel_name = full_path.relative_to(self.root_dir).as_posix()

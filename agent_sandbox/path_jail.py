@@ -132,45 +132,125 @@ class PathJail:
 
         return False
 
-    def snapshot_workspace(self, max_files: int = 5000) -> Dict[str, str]:
+    def snapshot_workspace(
+        self,
+        target_patterns: Optional[List[str]] = None,
+        explicit_paths: Optional[List[str | Path]] = None,
+        max_files: int = 5000,
+    ) -> Dict[str, str]:
         """
-        Capture a deterministic SHA-256 hash map of all files in the root_dir.
-        Ignores .git internals to remain lightweight.
+        Capture a deterministic SHA-256 hash map using targeted allowlist diffing.
+        Instead of walking up to 5,000 files across the entire workspace twice per command,
+        only snapshots and hashes paths matching the policy's allowed write patterns,
+        files explicitly touched, or candidate paths.
         """
         snapshot: Dict[str, str] = {}
-        count = 0
 
-        for current_root, dirs, files in os.walk(self.root_dir):
-            if count >= max_files:
-                dirs[:] = []
-                break
+        if explicit_paths:
+            for p in explicit_paths:
+                full_path = Path(p) if Path(p).is_absolute() else (self.root_dir / p).resolve()
+                if full_path.is_file():
+                    try:
+                        rel_path = full_path.relative_to(self.root_dir).as_posix()
+                        snapshot[rel_path] = self._hash_file(full_path)
+                    except (OSError, PermissionError, RuntimeError, ValueError):
+                        continue
+            return snapshot
 
-            # Prune .git and virtualenvs
-            dirs[:] = [d for d in dirs if d not in {".git", ".venv", "venv", "__pycache__", "node_modules"}]
+        patterns = target_patterns if target_patterns is not None else self.policy.allowed_paths_write
 
-            for file_name in files:
-                count += 1
-                if count > max_files:
+        if not patterns or any(p.strip("/") in {"**", "*"} for p in patterns):
+            count = 0
+            for current_root, dirs, files in os.walk(self.root_dir):
+                if count >= max_files:
                     dirs[:] = []
                     break
+                dirs[:] = [d for d in dirs if d not in {".git", ".venv", "venv", "__pycache__", "node_modules"}]
+                for file_name in files:
+                    count += 1
+                    if count > max_files:
+                        dirs[:] = []
+                        break
+                    full_path = Path(current_root) / file_name
+                    try:
+                        rel_path = full_path.relative_to(self.root_dir).as_posix()
+                        file_hash = self._hash_file(full_path)
+                        snapshot[rel_path] = file_hash
+                    except (OSError, PermissionError, RuntimeError):
+                        continue
+            return snapshot
 
-                full_path = Path(current_root) / file_name
+        candidate_paths: Set[Path] = set()
+
+        # Workspace root entries to catch any unauthorized additions at root level
+        try:
+            for entry in os.scandir(self.root_dir):
+                if entry.name not in {".git", ".venv", "venv", "__pycache__", "node_modules"} and entry.is_file():
+                    candidate_paths.add(Path(entry.path))
+        except (OSError, PermissionError):
+            pass
+
+        # Targeted allowlist scanning
+        for pattern in patterns:
+            clean_pat = pattern.replace("\\", "/").strip("/")
+            if "/**" in clean_pat:
+                dir_part = clean_pat.split("/**")[0]
+                target_dir = (self.root_dir / dir_part).resolve()
+                if target_dir.is_dir():
+                    count = 0
+                    for c_root, dirs, files in os.walk(target_dir):
+                        dirs[:] = [d for d in dirs if d not in {".git", ".venv", "venv", "__pycache__", "node_modules"}]
+                        for f in files:
+                            count += 1
+                            if count > max_files:
+                                break
+                            candidate_paths.add(Path(c_root) / f)
+            elif "*" in clean_pat:
                 try:
-                    rel_path = full_path.relative_to(self.root_dir).as_posix()
-                    file_hash = self._hash_file(full_path)
-                    snapshot[rel_path] = file_hash
-                except (OSError, PermissionError, RuntimeError):
-                    continue
+                    for matched in self.root_dir.glob(clean_pat):
+                        if matched.is_file():
+                            candidate_paths.add(matched)
+                except Exception:
+                    pass
+            else:
+                target = (self.root_dir / clean_pat).resolve()
+                if target.is_file():
+                    candidate_paths.add(target)
+                elif target.is_dir():
+                    count = 0
+                    for c_root, dirs, files in os.walk(target):
+                        dirs[:] = [d for d in dirs if d not in {".git", ".venv", "venv", "__pycache__", "node_modules"}]
+                        for f in files:
+                            count += 1
+                            if count > max_files:
+                                break
+                            candidate_paths.add(Path(c_root) / f)
+
+        for full_path in candidate_paths:
+            try:
+                rel_path = full_path.relative_to(self.root_dir).as_posix()
+                snapshot[rel_path] = self._hash_file(full_path)
+            except (OSError, PermissionError, RuntimeError, ValueError):
+                continue
 
         return snapshot
 
-    def diff_workspace(self, pre_snapshot: Dict[str, str], post_snapshot: Optional[Dict[str, str]] = None) -> FileDiff:
+    def diff_workspace(
+        self,
+        pre_snapshot: Dict[str, str],
+        post_snapshot: Optional[Dict[str, str]] = None,
+        target_patterns: Optional[List[str]] = None,
+        explicit_paths: Optional[List[str | Path]] = None,
+    ) -> FileDiff:
         """
         Compare current filesystem state against a prior snapshot.
         If post_snapshot is provided, reuses it to eliminate redundant filesystem hashing.
         """
         if post_snapshot is None:
-            post_snapshot = self.snapshot_workspace()
+            post_snapshot = self.snapshot_workspace(
+                target_patterns=target_patterns,
+                explicit_paths=explicit_paths,
+            )
         
         added: List[str] = []
         modified: List[str] = []

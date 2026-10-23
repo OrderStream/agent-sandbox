@@ -1,4 +1,4 @@
-name: "agent-sandbox"
+name: "orderstream-agent-sandbox"
 description: "Deterministic Zero-Trust Security Sandbox & Cryptographic Audit DAG for Autonomous AI Agents in CI/CD"
 author: "OrderStream"
 branding:

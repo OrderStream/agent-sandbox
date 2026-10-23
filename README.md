@@ -1,5 +1,6 @@
 # 🛡️ agent-sandbox
 
+[![PyPI](https://img.shields.io/pypi/v/orderstream-agent-sandbox.svg)](https://pypi.org/project/orderstream-agent-sandbox/)
 [![CI](https://github.com/OrderStream/agent-sandbox/actions/workflows/ci.yml/badge.svg)](https://github.com/OrderStream/agent-sandbox/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
@@ -119,8 +120,8 @@ jobs:
 ### 2. Using the CLI
 
 ```bash
-# Install agent-sandbox
-pip install agent-sandbox
+# Install from PyPI
+pip install orderstream-agent-sandbox
 
 # 1. Initialize a starter security policy
 agent-sandbox init --output agent-policy.yaml

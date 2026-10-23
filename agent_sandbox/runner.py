@@ -84,7 +84,7 @@ class ExecutionSandbox:
                 )
 
         # 2. Workspace Pre-execution Snapshot (Targeted allowlist diffing)
-        target_patterns = self.policy.allowed_paths_write if self.policy.allowed_paths_write else None
+        target_patterns = self.policy.allowed_paths_write
         pre_snapshot = self.path_jail.snapshot_workspace(target_patterns=target_patterns)
         pre_hash = sha256_hex(json.dumps(pre_snapshot, sort_keys=True))
 

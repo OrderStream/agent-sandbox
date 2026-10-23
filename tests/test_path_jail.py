@@ -87,6 +87,40 @@ class TestPathJail(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertIn("unauthorized.bin", violations[0])
 
+    def test_workspace_diff_catches_denied_path_tampering(self):
+        pre_snap = self.jail.snapshot_workspace()
+        self.assertIn(".github/workflows/ci.yml", pre_snap)
+
+        # Malicious workflow tampering
+        (self.root / ".github" / "workflows" / "ci.yml").write_text("name: Backdoor", encoding="utf-8")
+        diff = self.jail.diff_workspace(pre_snap)
+        self.assertIn(".github/workflows/ci.yml", diff.modified)
+
+        violations = self.jail.verify_diff(diff)
+        self.assertGreaterEqual(len(violations), 1)
+        self.assertTrue(any(".github/workflows/**" in v for v in violations))
+
+    def test_explicit_paths_diff(self):
+        target = self.root / "src" / "explicit.py"
+        pre_snap = self.jail.snapshot_workspace(explicit_paths=[target])
+        self.assertEqual(len(pre_snap), 0)
+
+        target.write_text("x = 1", encoding="utf-8")
+        post_snap = self.jail.snapshot_workspace(explicit_paths=[target])
+        self.assertIn("src/explicit.py", post_snap)
+
+        diff = self.jail.diff_workspace(pre_snap, post_snapshot=post_snap)
+        self.assertEqual(diff.added, ["src/explicit.py"])
+        self.assertEqual(len(self.jail.verify_diff(diff)), 0)
+
+    def test_read_only_policy_snapshot(self):
+        ro_policy = Policy(allowed_paths_read=["**"], allowed_paths_write=[])
+        ro_jail = PathJail(self.root, ro_policy)
+        snap = ro_jail.snapshot_workspace()
+        # Should not walk internal directories, only root files or denied files
+        self.assertNotIn("src/main.py", snap)
+
 
 if __name__ == "__main__":
     unittest.main()
+

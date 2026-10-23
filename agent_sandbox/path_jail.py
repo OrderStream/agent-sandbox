@@ -159,7 +159,10 @@ class PathJail:
 
         patterns = target_patterns if target_patterns is not None else self.policy.allowed_paths_write
 
-        if not patterns or any(p.strip("/") in {"**", "*"} for p in patterns):
+        # Fallback to whole-workspace recursive walk ONLY when:
+        # 1. No patterns or policy write rules are defined (None), OR
+        # 2. An unrestricted wildcard pattern like '**' or '*' is present.
+        if patterns is None or any(p.strip("/") in {"**", "*"} for p in patterns):
             count = 0
             for current_root, dirs, files in os.walk(self.root_dir):
                 if count >= max_files:
@@ -190,8 +193,13 @@ class PathJail:
         except (OSError, PermissionError):
             pass
 
-        # Targeted allowlist scanning
-        for pattern in patterns:
+        # Targeted allowlist scanning + explicitly denied paths to detect tampering
+        monitored_patterns = list(patterns)
+        for denied in self.policy.denied_paths:
+            if denied not in monitored_patterns:
+                monitored_patterns.append(denied)
+
+        for pattern in monitored_patterns:
             clean_pat = pattern.replace("\\", "/").strip("/")
             if "/**" in clean_pat:
                 dir_part = clean_pat.split("/**")[0]

@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agent-sandbox"
+name = "orderstream-agent-sandbox"
 version = "0.1.0"
 description = "Deterministic Zero-Trust Security Sandbox & Cryptographic Audit DAG for Autonomous AI Agents in CI/CD"
 readme = "README.md"

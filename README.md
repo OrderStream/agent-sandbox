@@ -337,8 +337,20 @@ To activate an enterprise license key:
 # Verify license status
 agent-sandbox license ASL1.<payload>.<signature>
 
+# Pass via CLI flag
+agent-sandbox exec --license-key "ASL1.eyJjaWQiOi..." -- pytest
+
 # Or set via environment variable
 export AGENT_SANDBOX_LICENSE_KEY="ASL1.eyJjaWQiOi..."
+```
+
+### Self-Hosted Cloud SaaS Dashboard
+
+Deploy or run the lightweight telemetry ingestion server and live security dashboard locally or in a container:
+
+```bash
+# Launch dashboard on http://localhost:8080 with optional API key protection
+agent-sandbox server --port 8080 --api-key "secret-key"
 ```
 
 ### Remote Cloud Synchronization & Slack Alerts
@@ -350,8 +362,12 @@ agent-sandbox exec \
   --cloud-endpoint "https://cloud.agentsandbox.dev/api/v1/telemetry" \
   --cloud-api-key "${{ secrets.AGENT_SANDBOX_CLOUD_KEY }}" \
   --webhook "https://hooks.slack.com/services/..." \
+  --approval-token "${{ secrets.SENIOR_ENG_APPROVAL_TOKEN }}" \
   -- python autonomous_agent.py
 ```
+
+### Dual-Authorization Human Gate
+For high-risk environments, configure `require_human_approval: true` in `agent-policy.yaml`. Autonomous agent runs are strictly halted unless authorized with `--approval-token` or `AGENT_SANDBOX_APPROVAL_TOKEN`.
 
 ### GitHub Marketplace 1-Click Installation
 When integrated via GitHub Actions in private repositories, commercial organizations can subscribe directly through [GitHub Marketplace](https://github.com/marketplace). Charges appear directly on your unified GitHub corporate invoice.

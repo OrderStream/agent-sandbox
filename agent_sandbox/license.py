@@ -36,6 +36,9 @@ class LicenseInfo:
     def is_enterprise(self) -> bool:
         return self.tier.lower() in ("pro", "enterprise")
 
+    def has_feature(self, feature_name: str) -> bool:
+        return feature_name in self.features
+
 
 def generate_license_key(
     customer_id: str,
@@ -43,7 +46,7 @@ def generate_license_key(
     seats: int,
     expires_in_days: int,
     org_domain: str,
-    signing_secret: str,
+    signing_secret: Optional[str] = None,
     features: Optional[list[str]] = None,
 ) -> str:
     """
@@ -53,6 +56,7 @@ def generate_license_key(
     if features is None:
         features = ["merkle_retention_365d", "multi_repo_sync", "sso_auth_gate", "slack_alerts"]
     
+    secret = signing_secret or os.environ.get(ENTERPRISE_SECRET_ENV_VAR, DEFAULT_PUBLIC_SALT)
     expires_at = int(time.time()) + (expires_in_days * 86400)
     payload_dict = {
         "cid": customer_id,
@@ -66,7 +70,7 @@ def generate_license_key(
     payload_b64 = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("utf-8")
 
     sig = hmac.new(
-        signing_secret.encode("utf-8"),
+        secret.encode("utf-8"),
         payload_b64.encode("utf-8"),
         hashlib.sha256
     ).hexdigest()

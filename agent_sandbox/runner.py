@@ -58,7 +58,59 @@ class ExecutionSandbox:
         t_limit = timeout or self.policy.max_execution_time_seconds
         violations: List[str] = []
 
-        # 1. Static AST Firewall Inspection
+        # 1. Enterprise Guardrail Verification
+        if self.policy.enterprise_license:
+            from agent_sandbox.license import verify_license_key
+            valid, _, lic_msg = verify_license_key(self.policy.enterprise_license)
+            if not valid:
+                err_text = f"Enterprise License Invalid: {lic_msg}"
+                violations.append(err_text)
+                if self.policy.is_enforcing():
+                    node = self.dag.record_event(
+                        action_type="license_block",
+                        target=command,
+                        stdout_content=err_text,
+                        exit_code=126,
+                        is_violation=True,
+                    )
+                    duration_ms = (time.perf_counter() - start_time) * 1000
+                    return ExecutionResult(
+                        command=command,
+                        exit_code=126,
+                        stdout="",
+                        stderr=f"Security Policy Block: {err_text}",
+                        duration_ms=duration_ms,
+                        violations=violations,
+                        merkle_node=node,
+                        blocked=True,
+                    )
+
+        if self.policy.require_human_approval:
+            approval_token = os.environ.get("AGENT_SANDBOX_APPROVAL_TOKEN") or getattr(self.policy, "approval_token", None)
+            if not approval_token:
+                err_text = "Dual-authorization required: Human approval token missing (set AGENT_SANDBOX_APPROVAL_TOKEN or pass --approval-token)"
+                violations.append(err_text)
+                if self.policy.is_enforcing():
+                    node = self.dag.record_event(
+                        action_type="human_approval_block",
+                        target=command,
+                        stdout_content=err_text,
+                        exit_code=126,
+                        is_violation=True,
+                    )
+                    duration_ms = (time.perf_counter() - start_time) * 1000
+                    return ExecutionResult(
+                        command=command,
+                        exit_code=126,
+                        stdout="",
+                        stderr=f"Security Policy Block: {err_text}",
+                        duration_ms=duration_ms,
+                        violations=violations,
+                        merkle_node=node,
+                        blocked=True,
+                    )
+
+        # 2. Static AST Firewall Inspection
         decision: FirewallDecision = self.firewall.inspect(command)
         if not decision.allowed:
             violations.extend(decision.reasons)

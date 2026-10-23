@@ -132,6 +132,27 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_exec(args: argparse.Namespace) -> int:
     policy = load_policy(args.policy) if args.policy else Policy()
+
+    # Enterprise License configuration & validation
+    cli_license = getattr(args, "license_key", None) or os.environ.get("AGENT_SANDBOX_LICENSE_KEY")
+    if cli_license:
+        policy.enterprise_license = cli_license
+
+    if policy.enterprise_license:
+        from agent_sandbox.license import verify_license_key
+        valid, info, lic_msg = verify_license_key(policy.enterprise_license)
+        if not valid:
+            print(f"[!] Enterprise License Warning: {lic_msg}", file=sys.stderr)
+            if policy.is_enforcing():
+                print("[-] Execution halted: Valid enterprise license required by policy.", file=sys.stderr)
+                return 126
+        elif info:
+            print(f"[+] Enterprise License Active: Tier '{info.tier}' ({info.seats} seats)", file=sys.stderr)
+
+    # Enterprise Dual-Authorization Approval Token
+    if getattr(args, "approval_token", None):
+        os.environ["AGENT_SANDBOX_APPROVAL_TOKEN"] = args.approval_token
+
     sandbox = ExecutionSandbox(root_dir=args.workdir, policy=policy)
 
     if isinstance(args.command, list):
@@ -221,6 +242,12 @@ def cmd_license_verify(args: argparse.Namespace) -> int:
         return 2
 
 
+def cmd_server(args: argparse.Namespace) -> int:
+    from agent_sandbox.cloud_server import run_cloud_server
+    run_cloud_server(port=args.port, host=args.host, api_key=args.api_key)
+    return 0
+
+
 def cmd_mcp(args: argparse.Namespace) -> int:
     from agent_sandbox.mcp_proxy import MCPProxyFilter, run_mcp_stdio_proxy
     policy = load_policy(args.policy) if args.policy else Policy()
@@ -247,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     exec_p.add_argument("--timeout", "-t", type=int, help="Override command timeout in seconds")
     # Enterprise Cloud & License flags
     exec_p.add_argument("--license-key", help="Commercial enterprise license key")
+    exec_p.add_argument("--approval-token", help="Human approval authorization token for dual-authorization gates")
     exec_p.add_argument("--cloud-endpoint", help="Agent-Sandbox Cloud SaaS ingestion endpoint URL")
     exec_p.add_argument("--cloud-api-key", help="API key for Agent-Sandbox Cloud")
     exec_p.add_argument("--webhook", help="Security webhook URL (Slack / Discord / SIEM) for real-time violation alerts")
@@ -276,6 +304,12 @@ def main(argv: list[str] | None = None) -> int:
     mcp_p.add_argument("--workdir", "-w", default=".", help="Root directory boundary (default: current dir)")
     mcp_p.add_argument("--server", "-s", help="Upstream MCP server command to wrap (e.g. 'npx -y @modelcontextprotocol/server-filesystem .')")
 
+    # server subcommand
+    server_p = subparsers.add_parser("server", help="Run lightweight Agent-Sandbox Cloud telemetry and security dashboard")
+    server_p.add_argument("--port", type=int, default=8080, help="Port to bind (default: 8080)")
+    server_p.add_argument("--host", default="0.0.0.0", help="Host interface (default: 0.0.0.0)")
+    server_p.add_argument("--api-key", help="Require Bearer API token for telemetry ingestion")
+
     args = parser.parse_args(argv)
 
     if args.subcommand == "exec":
@@ -287,6 +321,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify(args)
     elif args.subcommand == "license":
         return cmd_license_verify(args)
+    elif args.subcommand == "server":
+        return cmd_server(args)
     elif args.subcommand == "init":
         return cmd_init(args)
     elif args.subcommand == "inspect":

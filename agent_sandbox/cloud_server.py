@@ -12,6 +12,7 @@ import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 from agent_sandbox.merkle import verify_receipt
 
 
@@ -63,7 +64,8 @@ class CloudDashboardHandler(BaseHTTPRequestHandler):
         self._set_headers(200)
 
     def do_GET(self):
-        if self.path in ("/", "/dashboard"):
+        path = urlparse(self.path).path
+        if path in ("/", "/dashboard"):
             # Web UI Dashboard HTML
             html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -127,7 +129,7 @@ class CloudDashboardHandler(BaseHTTPRequestHandler):
 </html>"""
             self._set_headers(200, "text/html; charset=utf-8")
             self.wfile.write(html.encode("utf-8"))
-        elif self.path == "/api/v1/telemetry":
+        elif path == "/api/v1/telemetry":
             self._set_headers(200)
             self.wfile.write(json.dumps({
                 "status": "healthy",
@@ -135,7 +137,7 @@ class CloudDashboardHandler(BaseHTTPRequestHandler):
                 "violations_count": len(GLOBAL_STORE.violations_log),
                 "recent": GLOBAL_STORE.receipts[-50:],
             }).encode("utf-8"))
-        elif self.path == "/healthz":
+        elif path == "/healthz":
             self._set_headers(200)
             self.wfile.write(json.dumps({"status": "healthy", "service": "agent-sandbox-cloud"}).encode("utf-8"))
         else:
@@ -143,8 +145,22 @@ class CloudDashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Not Found"}).encode("utf-8"))
 
     def do_POST(self):
-        if self.path in ("/api/v1/telemetry", "/ingest"):
-            content_length = int(self.headers.get("Content-Length", 0))
+        path = urlparse(self.path).path
+        if path in ("/api/v1/telemetry", "/ingest"):
+            # Enforce API Key authentication if configured on server
+            expected_key = os.environ.get("AGENT_SANDBOX_CLOUD_API_KEY")
+            if expected_key:
+                auth_header = self.headers.get("Authorization", "")
+                if auth_header != f"Bearer {expected_key}":
+                    self._set_headers(401)
+                    self.wfile.write(json.dumps({"error": "Unauthorized: invalid or missing Bearer token"}).encode("utf-8"))
+                    return
+
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+            except (ValueError, TypeError):
+                content_length = 0
+
             if content_length == 0:
                 self._set_headers(400)
                 self.wfile.write(json.dumps({"error": "Empty payload"}).encode("utf-8"))
@@ -171,7 +187,9 @@ class CloudDashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Not Found"}).encode("utf-8"))
 
 
-def run_cloud_server(port: int = 8080, host: str = "0.0.0.0") -> None:
+def run_cloud_server(port: int = 8080, host: str = "0.0.0.0", api_key: Optional[str] = None) -> None:
+    if api_key:
+        os.environ["AGENT_SANDBOX_CLOUD_API_KEY"] = api_key
     server_address = (host, port)
     httpd = HTTPServer(server_address, CloudDashboardHandler)
     print(f"[+] Agent-Sandbox Cloud SaaS running on http://{host}:{port}")
